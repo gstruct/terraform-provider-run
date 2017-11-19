@@ -1,0 +1,15 @@
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Vendor dependencies folder
+/vendor/
+
+# Dist folder
+/dist/
+
+# Miscellanea
+.DS_Store
+

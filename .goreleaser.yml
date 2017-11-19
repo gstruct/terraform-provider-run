@@ -1,0 +1,7 @@
+build:
+  binary: terraform-provider-run
+  goos:
+    - darwin
+    - linux
+  goarch:
+    - amd64
