@@ -28,11 +28,13 @@ func resourceRunCommand() *schema.Resource {
 			"apply": {
 				Type:     schema.TypeString,
 				Required: true,
+                                ForceNew: true,
 			},
 
 			"check": {
 				Type:     schema.TypeString,
 				Required: true,
+                                ForceNew: true,
 			},
 
 			"destroy": {
@@ -43,6 +45,7 @@ func resourceRunCommand() *schema.Resource {
 			"shell": {
 				Type:     schema.TypeString,
 				Required: true,
+                                ForceNew: true,
 				DefaultFunc: func() (interface{}, error) {
 					if runtime.GOOS == "windows" {
 						return "cmd /C", nil
