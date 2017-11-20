@@ -17,6 +17,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+func init() {
+	rand.Seed(time.Now().Unix())
+}
+
 func resourceRunCommand() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceRunCommandApply,
