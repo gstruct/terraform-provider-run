@@ -118,6 +118,19 @@ func resourceRunCommand() *schema.Resource {
 				Optional: true,
 			},
 
+			"apply_output_format": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+
+			"apply_outputs": {
+				Type:     schema.TypeMap,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Computed: true,
+			},
+
 			"check_output_format": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -141,20 +154,21 @@ func makeCommand(key string, d *schema.ResourceData) *exec.Cmd {
 	return exec.Command(argv[0], argv[1:]...)
 }
 
-func runCommand(cmd *exec.Cmd, input []byte) error {
+func runCommand(cmd *exec.Cmd, input []byte) (int, *bytes.Buffer, error) {
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return err
+		return 0, nil, err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return err
+		return 0, nil, err
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return err
+		return 0, nil, err
 	}
 
+	stdoutCh := make(chan []byte)
 	done := make(chan bool, 1)
 	go func() {
 		defer stdin.Close()
@@ -168,7 +182,9 @@ func runCommand(cmd *exec.Cmd, input []byte) error {
 	go func() {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
-			log.Printf("[INFO] stdout: %s", scanner.Text())
+                        out := scanner.Bytes()
+			log.Printf("[INFO] stdout: %s", out)
+                        stdoutCh <- out
 		}
 		done <- true
 	}()
@@ -181,15 +197,40 @@ func runCommand(cmd *exec.Cmd, input []byte) error {
 	}()
 
 	if err = cmd.Start(); err != nil {
-		return err
+		return 0, nil, err
 	}
-	for i := 0; i < 2; i++ {
-		<-done
+	var buf bytes.Buffer
+	for i := 0; i < 2; {
+		select {
+		case line := <-stdoutCh:
+			buf.Write(line)
+			buf.WriteByte('\n')
+		case <-done:
+			i++
+                }
 	}
-	if err := cmd.Wait(); err != nil {
-		return err
+
+	var exitCode int
+	err = cmd.Wait()
+        if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			if runtime.GOOS == "windows" && os.Getenv("ERRORLEVEL") != "" {
+				errorLevel, err := strconv.ParseInt(os.Getenv("ERRORLEVEL"), 10, 32)
+				if err != nil {
+					return 0, nil, err
+				} else {
+					exitCode = int(errorLevel)
+				}
+			} else if waitStatus, ok := exitError.Sys().(syscall.WaitStatus); ok {
+				exitCode = waitStatus.ExitStatus()
+			} else {
+				return 0, nil, err
+			}
+		} else {
+			return 0, nil, err
+		}
 	}
-	return nil
+	return exitCode, &buf, err
 }
 
 func makeInput(d *schema.ResourceData, inputType string) ([]byte, error) {
@@ -252,8 +293,8 @@ func setOutput(d *schema.ResourceData, buf *bytes.Buffer, outputType string) err
 		log.Printf("[WARN] Unsupported output_format for resource \"%s\"", d.Id())
 		outputs = nil
 	}
-	log.Printf("[DEBUG] check_outputs = \"%+v\"", outputs)
-	return d.Set("check_outputs", outputs)
+	log.Printf("[DEBUG] %s_outputs = \"%+v\"", outputType, outputs)
+	return d.Set(fmt.Sprintf("%s_outputs", outputType), outputs)
 }
 
 func resourceRunCommandApply(d *schema.ResourceData, meta interface{}) error {
@@ -263,9 +304,13 @@ func resourceRunCommandApply(d *schema.ResourceData, meta interface{}) error {
 	}
 	cmd := makeCommand("apply", d)
 
-	if err := runCommand(cmd, input); err != nil {
+	_, output, err := runCommand(cmd, input)
+        if err != nil {
 		return err
 	}
+        if err := setOutput(d, output, "apply"); err != nil {
+                return err
+        }
 
 	return resourceRunCommandCheck(d, meta)
 }
@@ -277,81 +322,11 @@ func resourceRunCommandCheck(d *schema.ResourceData, meta interface{}) error {
 	}
 	cmd := makeCommand("check", d)
 
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
+	exitCode, output, err := runCommand(cmd, input)
 
-	stdoutCh := make(chan []byte)
-	done := make(chan bool, 1)
-	go func() {
-		defer stdin.Close()
-		if len(input) > 0 {
-			_, err := stdin.Write(input)
-			if err != nil {
-				log.Printf("[WARN] error writing to stdin: %s", err.Error())
-			}
-		}
-	}()
-	go func() {
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			out := scanner.Bytes()
-			log.Printf("[INFO] stdout: %s", out)
-			stdoutCh <- out
-		}
-		done <- true
-	}()
-	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			log.Printf("[INFO] stderr: %s", scanner.Text())
-		}
-		done <- true
-	}()
-
-	if err = cmd.Start(); err != nil {
-		return err
-	}
-
-	var buf bytes.Buffer
-	for i := 0; i < 2; {
-		select {
-		case line := <-stdoutCh:
-			buf.Write(line)
-			buf.WriteByte('\n')
-		case <-done:
-			i++
-		}
-	}
-
-	var exitCode int
-	if err := cmd.Wait(); err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
-			if runtime.GOOS == "windows" && os.Getenv("ERRORLEVEL") != "" {
-				errorLevel, err := strconv.ParseInt(os.Getenv("ERRORLEVEL"), 10, 32)
-				if err != nil {
-					return err
-				} else {
-					exitCode = int(errorLevel)
-				}
-			} else if waitStatus, ok := exitError.Sys().(syscall.WaitStatus); ok {
-				exitCode = waitStatus.ExitStatus()
-			} else {
-				return err
-			}
-		} else {
-			return err
-		}
-	}
+        if err != nil && exitCode == 0 {
+                return err
+        }
 
 	if d.Id() == "" {
 		d.SetId(fmt.Sprintf("%d", rand.Int()))
@@ -363,7 +338,7 @@ func resourceRunCommandCheck(d *schema.ResourceData, meta interface{}) error {
 		return nil
 	}
 
-	return setOutput(d, &buf, "check")
+	return setOutput(d, output, "check")
 }
 
 func resourceRunCommandDestroy(d *schema.ResourceData, meta interface{}) error {
@@ -372,5 +347,6 @@ func resourceRunCommandDestroy(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 	cmd := makeCommand("destroy", d)
-	return runCommand(cmd, input)
+        _, _, err = runCommand(cmd, input)
+        return err
 }
