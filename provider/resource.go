@@ -50,6 +50,12 @@ func resourceRunCommand() *schema.Resource {
 				Optional: true,
 			},
 
+			"keepers": {
+				Type:     schema.TypeMap,
+				Optional: true,
+				ForceNew: true,
+			},
+
 			"shell": {
 				Type:     schema.TypeString,
 				Required: true,
