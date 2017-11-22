@@ -242,7 +242,7 @@ func setOutput(d *schema.ResourceData, buf *bytes.Buffer, outputType string) err
 		}
 		tmap := tree.ToMap()
 		for k, v := range tmap {
-			outputs[k] = v
+			outputs[k] = v.(string)
 		}
 	case "", "string":
 		outputs["string"] = buf.String()
