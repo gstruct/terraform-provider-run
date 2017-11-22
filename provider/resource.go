@@ -125,6 +125,9 @@ func resourceRunCommand() *schema.Resource {
 
 			"check_outputs": {
 				Type:     schema.TypeMap,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
 				Computed: true,
 			},
 		},
@@ -211,7 +214,7 @@ func makeInput(d *schema.ResourceData, inputType string) ([]byte, error) {
 
 func setOutput(d *schema.ResourceData, buf *bytes.Buffer, outputType string) error {
 	outputFormat := d.Get(fmt.Sprintf("%s_output_format", outputType)).(string)
-	outputs := make(map[string]interface{})
+	outputs := make(map[string]string)
 	switch strings.ToLower(outputFormat) {
 	case "yaml", "yml":
 		if err := yaml.Unmarshal(buf.Bytes(), &outputs); err != nil {
