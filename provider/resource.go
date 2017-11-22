@@ -189,9 +189,9 @@ func makeInput(d *schema.ResourceData, inputType string) ([]byte, error) {
 		return json.Marshal(inputs)
 	case "toml":
 		return toml.Marshal(inputs)
-	case "", "stdin":
-		if v, ok := inputs["stdin"]; ok {
-			return v.([]byte), nil
+	case "", "string":
+		if v, ok := inputs["string"]; ok {
+			return []byte(v.(string)), nil
 		}
 	default:
 		log.Printf("[WARN] Unsupported %s_input_format: %s", inputType, inputFormat)
@@ -231,8 +231,8 @@ func setOutput(d *schema.ResourceData, buf *bytes.Buffer, outputType string) err
 		for k, v := range tmap {
 			outputs[k] = v
 		}
-	case "", "stdout":
-		outputs["stdout"] = string(buf.Bytes())
+	case "", "string":
+		outputs["string"] = buf.String()
 	case "null":
 		outputs = nil
 	default:
