@@ -72,6 +72,7 @@ func resourceRunCommand() *schema.Resource {
 			"check_input_format": {
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 
 			"check_inputs": {
@@ -80,11 +81,13 @@ func resourceRunCommand() *schema.Resource {
 					Type: schema.TypeString,
 				},
 				Optional: true,
+				ForceNew: true,
 			},
 
 			"apply_input_format": {
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 
 			"apply_inputs": {
@@ -93,6 +96,7 @@ func resourceRunCommand() *schema.Resource {
 					Type: schema.TypeString,
 				},
 				Optional: true,
+				ForceNew: true,
 			},
 
 			"destroy_input_format": {
