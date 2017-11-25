@@ -124,7 +124,7 @@ func resourceRunCommand() *schema.Resource {
 			},
 
 			"apply_outputs": {
-				Type:     schema.TypeMap,
+				Type: schema.TypeMap,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
@@ -137,7 +137,7 @@ func resourceRunCommand() *schema.Resource {
 			},
 
 			"check_outputs": {
-				Type:     schema.TypeMap,
+				Type: schema.TypeMap,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
@@ -147,14 +147,15 @@ func resourceRunCommand() *schema.Resource {
 	}
 }
 
-func makeCommand(key string, d *schema.ResourceData) *exec.Cmd {
+func makeCommand(key string, d *schema.ResourceData) []string {
 	argv := strings.Split(d.Get("shell").(string), " ")
 	argv = append(argv, d.Get(key).(string))
-	log.Printf("[DEBUG] Running command: %s", strings.Join(argv, " "))
-	return exec.Command(argv[0], argv[1:]...)
+	return argv
 }
 
-func runCommand(cmd *exec.Cmd, input []byte) (int, *bytes.Buffer, error) {
+func runCommand(argv []string, input []byte) (int, *bytes.Buffer, error) {
+	log.Printf("[DEBUG] Running local command: %s", strings.Join(argv, " "))
+	cmd := exec.Command(argv[0], argv[1:]...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return 0, nil, err
@@ -182,9 +183,9 @@ func runCommand(cmd *exec.Cmd, input []byte) (int, *bytes.Buffer, error) {
 	go func() {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
-                        out := scanner.Bytes()
+			out := scanner.Bytes()
 			log.Printf("[INFO] stdout: %s", out)
-                        stdoutCh <- out
+			stdoutCh <- out
 		}
 		done <- true
 	}()
@@ -207,12 +208,12 @@ func runCommand(cmd *exec.Cmd, input []byte) (int, *bytes.Buffer, error) {
 			buf.WriteByte('\n')
 		case <-done:
 			i++
-                }
+		}
 	}
 
 	var exitCode int
 	err = cmd.Wait()
-        if err != nil {
+	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			if runtime.GOOS == "windows" && os.Getenv("ERRORLEVEL") != "" {
 				errorLevel, err := strconv.ParseInt(os.Getenv("ERRORLEVEL"), 10, 32)
@@ -302,15 +303,15 @@ func resourceRunCommandApply(d *schema.ResourceData, meta interface{}) error {
 	if err != nil {
 		return err
 	}
-	cmd := makeCommand("apply", d)
+	argv := makeCommand("apply", d)
 
-	_, output, err := runCommand(cmd, input)
-        if err != nil {
+	_, output, err := runCommand(argv, input)
+	if err != nil {
 		return err
 	}
-        if err := setOutput(d, output, "apply"); err != nil {
-                return err
-        }
+	if err := setOutput(d, output, "apply"); err != nil {
+		return err
+	}
 
 	return resourceRunCommandCheck(d, meta)
 }
@@ -320,13 +321,13 @@ func resourceRunCommandCheck(d *schema.ResourceData, meta interface{}) error {
 	if err != nil {
 		return err
 	}
-	cmd := makeCommand("check", d)
+	argv := makeCommand("check", d)
 
-	exitCode, output, err := runCommand(cmd, input)
+	exitCode, output, err := runCommand(argv, input)
 
-        if err != nil && exitCode == 0 {
-                return err
-        }
+	if err != nil && exitCode == 0 {
+		return err
+	}
 
 	if d.Id() == "" {
 		d.SetId(fmt.Sprintf("%d", rand.Int()))
@@ -346,7 +347,7 @@ func resourceRunCommandDestroy(d *schema.ResourceData, meta interface{}) error {
 	if err != nil {
 		return err
 	}
-	cmd := makeCommand("destroy", d)
-        _, _, err = runCommand(cmd, input)
-        return err
+	argv := makeCommand("destroy", d)
+	_, _, err = runCommand(argv, input)
+	return err
 }
