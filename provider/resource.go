@@ -256,7 +256,7 @@ func makeInput(d *schema.ResourceData, inputType string) ([]byte, error) {
 
 func setOutput(d *schema.ResourceData, buf *bytes.Buffer, outputType string) error {
 	outputFormat := d.Get(fmt.Sprintf("%s_output_format", outputType)).(string)
-	outputs := make(map[string]string)
+	outputs := make(map[string]interface{})
 	switch strings.ToLower(outputFormat) {
 	case "yaml", "yml":
 		if err := yaml.Unmarshal(buf.Bytes(), &outputs); err != nil {
@@ -294,8 +294,14 @@ func setOutput(d *schema.ResourceData, buf *bytes.Buffer, outputType string) err
 		log.Printf("[WARN] Unsupported output_format for resource \"%s\"", d.Id())
 		outputs = nil
 	}
-	log.Printf("[DEBUG] %s_outputs = \"%+v\"", outputType, outputs)
-	return d.Set(fmt.Sprintf("%s_outputs", outputType), outputs)
+	var str_outputs map[string]string
+	if outputs != nil {
+		str_outputs = map_if_to_str(outputs)
+	} else {
+		str_outputs = nil
+	}
+	log.Printf("[DEBUG] %s_outputs = \"%+v\"", outputType, str_outputs)
+	return d.Set(fmt.Sprintf("%s_outputs", outputType), str_outputs)
 }
 
 func resourceRunCommandApply(d *schema.ResourceData, meta interface{}) error {
