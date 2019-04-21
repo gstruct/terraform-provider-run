@@ -72,7 +72,12 @@ func resourceRunCommand() *schema.Resource {
 			"exit_code": {
 				Type:     schema.TypeInt,
 				Optional: true,
-				Default:  0,
+			},
+
+			"exit_code_force_new": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				ForceNew: true,
 			},
 
 			"check_input_format": {
@@ -339,7 +344,14 @@ func resourceRunCommandCheck(d *schema.ResourceData, meta interface{}) error {
 		d.SetId(fmt.Sprintf("%d", rand.Int()))
 	}
 
-	if exitCode != d.Get("exit_code").(int) {
+	configExitCodeForceNew := d.Get("exit_code_force_new")
+	configExitCode := d.Get("exit_code")
+
+	if configExitCodeForceNew != nil && exitCode != configExitCodeForceNew.(int) {
+		d.Set("exit_code_force_new", exitCode)
+		d.Set("check_outputs", nil)
+		return nil
+	} else if configExitCode != nil && exitCode != configExitCode.(int) {
 		d.Set("exit_code", exitCode)
 		d.Set("check_outputs", nil)
 		return nil
