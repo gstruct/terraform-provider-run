@@ -95,6 +95,14 @@ func resourceRunCommand() *schema.Resource {
 				ForceNew: true,
 			},
 
+			"check_env": {
+				Type: schema.TypeMap,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Optional: true,
+			},
+
 			"apply_input_format": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -123,8 +131,24 @@ func resourceRunCommand() *schema.Resource {
 				Optional: true,
 			},
 
+			"destroy_env": {
+				Type: schema.TypeMap,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Optional: true,
+			},
+
 			"apply_output_format": {
 				Type:     schema.TypeString,
+				Optional: true,
+			},
+
+			"apply_env": {
+				Type: schema.TypeMap,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
 				Optional: true,
 			},
 
@@ -158,9 +182,13 @@ func makeCommand(key string, d *schema.ResourceData) []string {
 	return argv
 }
 
-func runCommand(argv []string, input []byte) (int, *bytes.Buffer, error) {
+func runCommand(argv []string, input []byte, env []string) (int, *bytes.Buffer, error) {
 	log.Printf("[DEBUG] Running local command: %s", strings.Join(argv, " "))
 	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Env = os.Environ()
+	for _, e := range env {
+		cmd.Env = append(cmd.Env, e)
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return 0, nil, err
@@ -259,6 +287,14 @@ func makeInput(d *schema.ResourceData, inputType string) ([]byte, error) {
 	return []byte{}, nil
 }
 
+func makeEnv(d *schema.ResourceData, envType string) ([]string) {
+	env := []string{}
+	for k, v := range d.Get(fmt.Sprintf("%s_env", envType)).(map[string]interface{}) {
+		env = append(env, fmt.Sprintf("%s=%s", k, v.(string)))
+	}
+	return env
+}
+
 func setOutput(d *schema.ResourceData, buf *bytes.Buffer, outputType string) error {
 	outputFormat := d.Get(fmt.Sprintf("%s_output_format", outputType)).(string)
 	outputs := make(map[string]interface{})
@@ -316,7 +352,9 @@ func resourceRunCommandApply(d *schema.ResourceData, meta interface{}) error {
 	}
 	argv := makeCommand("apply", d)
 
-	_, output, err := runCommand(argv, input)
+	env := makeEnv(d, "apply")
+
+	_, output, err := runCommand(argv, input, env)
 	if err != nil {
 		return err
 	}
@@ -334,7 +372,9 @@ func resourceRunCommandCheck(d *schema.ResourceData, meta interface{}) error {
 	}
 	argv := makeCommand("check", d)
 
-	exitCode, output, err := runCommand(argv, input)
+	env := makeEnv(d, "apply")
+
+	exitCode, output, err := runCommand(argv, input, env)
 
 	if err != nil && exitCode == 0 {
 		return err
@@ -366,6 +406,9 @@ func resourceRunCommandDestroy(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 	argv := makeCommand("destroy", d)
-	_, _, err = runCommand(argv, input)
+
+	env := makeEnv(d, "destroy")
+
+	_, _, err = runCommand(argv, input, env)
 	return err
 }
