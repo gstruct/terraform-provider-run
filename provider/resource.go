@@ -372,7 +372,7 @@ func resourceRunCommandCheck(d *schema.ResourceData, meta interface{}) error {
 	}
 	argv := makeCommand("check", d)
 
-	env := makeEnv(d, "apply")
+	env := makeEnv(d, "check")
 
 	exitCode, output, err := runCommand(argv, input, env)
 
@@ -387,11 +387,12 @@ func resourceRunCommandCheck(d *schema.ResourceData, meta interface{}) error {
 	configExitCodeForceNew := d.Get("exit_code_force_new")
 	configExitCode := d.Get("exit_code")
 
-	if configExitCodeForceNew != nil && exitCode != configExitCodeForceNew.(int) {
+	if configExitCodeForceNew.(int) != 0 && exitCode != configExitCodeForceNew.(int) {
 		d.Set("exit_code_force_new", exitCode)
+		d.Set("exit_code", exitCode)
 		d.Set("check_outputs", nil)
 		return nil
-	} else if configExitCode != nil && exitCode != configExitCode.(int) {
+	} else if exitCode != configExitCode.(int) {
 		d.Set("exit_code", exitCode)
 		d.Set("check_outputs", nil)
 		return nil
